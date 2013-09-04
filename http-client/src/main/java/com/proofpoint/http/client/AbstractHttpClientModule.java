@@ -30,12 +30,19 @@ abstract class AbstractHttpClientModule
     protected final Class<? extends Annotation> annotation;
     protected Binder binder;
     protected Binder rootBinder;
+    protected String serviceName;
 
     protected AbstractHttpClientModule(String name, Class<? extends Annotation> annotation, @Nullable Binder rootBinder)
+    {
+        this(name, annotation, rootBinder, null);
+    }
+    
+    protected AbstractHttpClientModule(String name, Class<? extends Annotation> annotation, @Nullable Binder rootBinder, String serviceName)
     {
         this.name = checkNotNull(name, "name is null");
         this.annotation = checkNotNull(annotation, "annotation is null");
         this.rootBinder = rootBinder;
+        this.serviceName = serviceName;
     }
 
     @Override

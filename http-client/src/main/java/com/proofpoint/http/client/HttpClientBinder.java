@@ -61,6 +61,14 @@ public class HttpClientBinder
         checkNotNull(annotation, "annotation is null");
         return createAsyncBindingBuilder(new AsyncHttpClientModule(name, annotation, rootBinder));
     }
+    
+    public HttpClientAsyncBindingBuilder bindServiceAsyncHttpClient(String name, Class<? extends Annotation> annotation, String serviceName)
+    {
+        checkNotNull(name, "name is null");
+        checkNotNull(annotation, "annotation is null");
+        checkNotNull(serviceName, "serviceName is null");
+        return createAsyncBindingBuilder(new AsyncHttpClientModule(name, annotation, rootBinder, serviceName));
+    }
 
     private HttpClientBindingBuilder createBindingBuilder(AbstractHttpClientModule module)
     {

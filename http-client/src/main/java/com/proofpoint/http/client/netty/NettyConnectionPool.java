@@ -6,6 +6,7 @@ import com.google.common.collect.LinkedListMultimap;
 import com.google.common.net.HostAndPort;
 import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.ListenableFuture;
+
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
@@ -19,6 +20,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
+import javax.net.ssl.TrustManager;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.ConnectException;
@@ -48,17 +51,20 @@ public class NettyConnectionPool
     private final int maxConnections;
     private final AtomicInteger checkedOutConnections = new AtomicInteger();
     private final boolean enablePooling;
+    private final TrustManager[] trustManager;
 
     public NettyConnectionPool(ClientBootstrap bootstrap,
             int maxConnections,
             Executor executorService,
-            boolean enablePooling)
+            boolean enablePooling,
+            TrustManager[] trustManager)
     {
         this.bootstrap = bootstrap;
         this.maxConnections = maxConnections;
         this.connectionPermits = new PermitQueue(this.maxConnections);
         this.executor = executorService;
         this.enablePooling = enablePooling;
+        this.trustManager = trustManager;
     }
 
     @Override
@@ -156,7 +162,7 @@ public class NettyConnectionPool
     {
         ChannelFuture future = bootstrap.connect(remoteAddress);
         if (isSsl) {
-            future.addListener(new SslConnectionListener(remoteAddress, connectionCallback, openChannels));
+            future.addListener(new SslConnectionListener(remoteAddress, connectionCallback, openChannels, trustManager));
         }
         else {
             future.addListener(new CallbackConnectionListener(remoteAddress, connectionCallback, openChannels));
@@ -270,12 +276,14 @@ public class NettyConnectionPool
         private final InetSocketAddress remoteAddress;
         private final ConnectionCallback connectionCallback;
         private final ChannelGroup openChannels;
+        private final TrustManager[] trustManager;
 
-        public SslConnectionListener(InetSocketAddress remoteAddress, ConnectionCallback connectionCallback, ChannelGroup openChannels)
+        public SslConnectionListener(InetSocketAddress remoteAddress, ConnectionCallback connectionCallback, ChannelGroup openChannels, TrustManager[] trustManager)
         {
             this.remoteAddress = remoteAddress;
             this.connectionCallback = connectionCallback;
             this.openChannels = openChannels;
+            this.trustManager = trustManager;
         }
 
         @Override
@@ -287,7 +295,16 @@ public class NettyConnectionPool
                 SSLParameters sslParameters = new SSLParameters();
                 sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
 
-                SSLEngine sslEngine = SSLContext.getDefault().createSSLEngine(remoteAddress.getHostString(), remoteAddress.getPort());
+                SSLContext context;
+                if (trustManager != null) {
+                    context = SSLContext.getInstance("TLS");
+                    context.init(null, trustManager, null);
+                }
+                else {
+                    context = SSLContext.getDefault();
+                }
+                
+                SSLEngine sslEngine = context.createSSLEngine(remoteAddress.getHostString(), remoteAddress.getPort());
                 sslEngine.setSSLParameters(sslParameters);
                 sslEngine.setUseClientMode(true);
 

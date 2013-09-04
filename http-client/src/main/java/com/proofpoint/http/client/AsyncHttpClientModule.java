@@ -30,6 +30,8 @@ import com.proofpoint.http.client.netty.NettyIoPoolConfig;
 import com.proofpoint.log.Logger;
 
 import javax.annotation.PreDestroy;
+import javax.net.ssl.TrustManager;
+
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +59,11 @@ public class AsyncHttpClientModule
         super(name, annotation, checkNotNull(rootBinder, "rootBinder is null"));
     }
 
+    protected AsyncHttpClientModule(String name, Class<? extends Annotation> annotation, Binder rootBinder, String serviceName)
+    {
+        super(name, annotation, checkNotNull(rootBinder, "rootBinder is null"), serviceName);
+    }
+    
     @Override
     public Annotation getFilterQualifier()
     {
@@ -81,7 +88,7 @@ public class AsyncHttpClientModule
         rootBinder.bind(NettyIoPool.class).toProvider(SharedNettyIoPoolProvider.class).in(Scopes.SINGLETON);
 
         // bind the async client
-        binder.bind(AsyncHttpClient.class).annotatedWith(annotation).toProvider(new HttpClientProvider(name, annotation)).in(Scopes.SINGLETON);
+        binder.bind(AsyncHttpClient.class).annotatedWith(annotation).toProvider(new HttpClientProvider(name, annotation, serviceName)).in(Scopes.SINGLETON);
 
         // bind the a sync client also
         binder.bind(HttpClient.class).annotatedWith(annotation).to(Key.get(AsyncHttpClient.class, annotation));
@@ -108,12 +115,14 @@ public class AsyncHttpClientModule
         private final List<NettyAsyncHttpClient> clients = new ArrayList<>();
         private final String name;
         private final Class<? extends Annotation> annotation;
+        private final String serviceName;
         private Injector injector;
 
-        private HttpClientProvider(String name, Class<? extends Annotation> annotation)
+        private HttpClientProvider(String name, Class<? extends Annotation> annotation, String serviceName)
         {
             this.name = name;
             this.annotation = annotation;
+            this.serviceName = serviceName;
         }
 
         @Inject
@@ -147,7 +156,13 @@ public class AsyncHttpClientModule
                 ioPool = injector.getInstance(NettyIoPool.class);
             }
 
-            NettyAsyncHttpClient client = new NettyAsyncHttpClient(name, ioPool, config, asyncConfig, filters);
+            //TODO: is there a Guicey way of doing this?
+            TrustManager[] trustManager = null;
+            if (serviceName != null) {
+                trustManager = new TrustManager [] { new ServiceTrustManager(serviceName) };
+            }
+            
+            NettyAsyncHttpClient client = new NettyAsyncHttpClient(name, ioPool, config, asyncConfig, filters, trustManager);
             clients.add(client);
             return client;
         }

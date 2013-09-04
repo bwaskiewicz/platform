@@ -16,6 +16,7 @@ import com.proofpoint.http.client.ResponseHandler;
 import com.proofpoint.http.client.netty.NettyConnectionPool.ConnectionCallback;
 import com.proofpoint.http.client.netty.NettyResponseFuture.NettyAsyncHttpState;
 import com.proofpoint.http.client.netty.socks.Socks4ClientBootstrap;
+
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.buffer.ChannelBufferOutputStream;
 import org.jboss.netty.buffer.DynamicChannelBuffer;
@@ -35,6 +36,8 @@ import org.weakref.jmx.Flatten;
 import org.weakref.jmx.Managed;
 
 import javax.annotation.PreDestroy;
+import javax.net.ssl.TrustManager;
+
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
@@ -54,6 +57,7 @@ public class NettyAsyncHttpClient
     private final OrderedMemoryAwareThreadPoolExecutor executor;
     private final NettyConnectionPool nettyConnectionPool;
     private final HashedWheelTimer timer;
+    private final TrustManager[] trustManager;
 
     public NettyAsyncHttpClient(String name, HttpClientConfig config, NettyIoPool ioPool)
     {
@@ -66,12 +70,23 @@ public class NettyAsyncHttpClient
             NettyAsyncHttpClientConfig asyncConfig,
             Set<? extends HttpRequestFilter> requestFilters)
     {
+        this(name, ioPool, config, asyncConfig, requestFilters, null);
+    }
+    
+    public NettyAsyncHttpClient(String name,
+            NettyIoPool ioPool,
+            HttpClientConfig config,
+            NettyAsyncHttpClientConfig asyncConfig,
+            Set<? extends HttpRequestFilter> requestFilters,
+            TrustManager[] trustManager)
+    {
         Preconditions.checkNotNull(name, "name is null");
         Preconditions.checkNotNull(ioPool, "ioPool is null");
         Preconditions.checkNotNull(config, "config is null");
         Preconditions.checkNotNull(asyncConfig, "asyncConfig is null");
         Preconditions.checkNotNull(requestFilters, "requestFilters is null");
-
+        this.trustManager = trustManager;
+        
         this.requestFilters = ImmutableList.copyOf(requestFilters);
 
         String namePrefix = "http-client-" + name;
@@ -97,7 +112,8 @@ public class NettyAsyncHttpClient
         nettyConnectionPool = new NettyConnectionPool(bootstrap,
                 config.getMaxConnections(),
                 executor,
-                asyncConfig.isEnableConnectionPooling());
+                asyncConfig.isEnableConnectionPooling(),
+                this.trustManager);
 
         HttpClientPipelineFactory pipelineFactory = new HttpClientPipelineFactory(nettyConnectionPool, timer, executor, config.getReadTimeout(), asyncConfig.getMaxContentLength());
         bootstrap.setPipelineFactory(pipelineFactory);
@@ -156,6 +172,10 @@ public class NettyAsyncHttpClient
         Preconditions.checkArgument("http".equalsIgnoreCase(request.getUri().getScheme()) || "https".equalsIgnoreCase(request.getUri().getScheme()),
                 "%s only supports http and https requests", getClass().getSimpleName());
 
+        if ("http".equalsIgnoreCase(request.getUri().getScheme()) && trustManager != null) {
+            throw new UnsupportedOperationException("A Service Trust Manager has been set. HTTP requests are not supported.");
+        }
+        
         // create a future for the caller
         NettyResponseFuture<T, E> nettyResponseFuture = new NettyResponseFuture<>(request, responseHandler, stats);
 
