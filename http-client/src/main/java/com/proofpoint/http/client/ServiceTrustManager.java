@@ -5,6 +5,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
@@ -52,6 +53,11 @@ public class ServiceTrustManager implements X509TrustManager
             throw new CertificateException("no certificates available");
         }
         X509Certificate certificate = chain[0];
+        Collection<List<?>> alternateNames = certificate.getSubjectAlternativeNames();
+        System.out.println("*** got " + alternateNames.size() + " alternate names");
+        for(List<?> list: alternateNames) {
+            System.out.println("*** alternate name: " + list);
+        }
         X500Principal principal = certificate.getSubjectX500Principal();
         boolean matched = false;
         try {

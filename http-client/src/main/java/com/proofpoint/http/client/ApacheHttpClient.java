@@ -64,6 +64,7 @@ public class ApacheHttpClient
     private final RequestStats stats = new RequestStats();
     private final HttpClient httpClient;
     private final List<HttpRequestFilter> requestFilters;
+    private final boolean sslOnly;
 
     public ApacheHttpClient()
     {
@@ -98,6 +99,7 @@ public class ApacheHttpClient
                 throw new RuntimeException(e);
             }
         }
+        sslOnly = trustManager!=null;
 
         BasicHttpParams httpParams = new BasicHttpParams();
         httpParams.setParameter(CoreConnectionPNames.SO_TIMEOUT, (int) config.getReadTimeout().toMillis());
@@ -138,6 +140,10 @@ public class ApacheHttpClient
         Preconditions.checkNotNull(request, "request is null");
         Preconditions.checkNotNull(responseHandler, "responseHandler is null");
 
+        if(sslOnly && "http".equalsIgnoreCase(request.getUri().getScheme())) {
+            throw new UnsupportedOperationException("A Service Trust Manager has been set. HTTP requests are not supported.");
+        }
+        
         for (HttpRequestFilter requestFilter : requestFilters) {
             request = requestFilter.filterRequest(request);
         }
